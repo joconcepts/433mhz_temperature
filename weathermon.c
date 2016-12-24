@@ -138,40 +138,38 @@ void record_sensor_data()
            new_temp < -200 || new_temp > 1200) {
         return;
     }
+    float c_temp = (new_temp/10.0 - 32) * (5.0/9.0);
     char *data;
-    size_t sz;
-    sz = snprintf(NULL, 0, "{\"id\": %d, \"temp\": %d, \"humidity\": %d, \"battery\": %d}\n", ch, new_temp, new_hum, low_bat);
-    data = (char *)malloc(sz + 1);
-    snprintf(data, sz+1, "{\"id\": %d, \"temp\": %d, \"humidity\": %d, \"battery\": %d}\n", ch, new_temp, new_hum, low_bat);
+    data = (char *)malloc(128);
+    snprintf(data, 128, "{\"thermometer_id\": %d, \"temperature\": %.2f, \"humidity\": %d}", ch, c_temp, new_hum);
     post_curl(data);
-    free(data);
+  free(data);
 }
 
-void post_curl(char *data) {
+void post_curl(char *post_data) {
   CURL *curl;
   CURLcode res;
 
-  /* In windows, this will init the winsock stuff */ 
+  struct curl_slist *headers = NULL;
+  headers = curl_slist_append(headers, "Accept: application/json");
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  headers = curl_slist_append(headers, "charsets: utf-8");
+
+  printf("CURL_DATA: %s\n", post_data);
+
   curl_global_init(CURL_GLOBAL_ALL);
 
-  /* get a curl handle */ 
   curl = curl_easy_init();
   if(curl) {
-    /* First set the URL that is about to receive our POST. This URL can
-       just as well be a https:// URL if that is what should receive the
-       data. */ 
     curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.12/thermometer_temperatures.json");
-    /* Now specify the POST data */ 
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
 
-    /* Perform the request, res will get the return code */ 
     res = curl_easy_perform(curl);
-    /* Check for errors */ 
     if(res != CURLE_OK)
       fprintf(stderr, "curl_easy_perform() failed: %s\n",
           curl_easy_strerror(res));
 
-    /* always cleanup */ 
     curl_easy_cleanup(curl);
   }
   curl_global_cleanup();
