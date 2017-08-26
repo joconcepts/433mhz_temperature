@@ -1,7 +1,7 @@
 CC=gcc
 
 CFLAGS=-std=gnu99
-LIBRARIES=-lwiringPi -lpthread -lcurl
+LIBRARIES=-lwiringPi -lpthread
 
 all:  weathermon
 

@@ -17,8 +17,41 @@ char      num_bytes;
 char      manchester[7];
 sigset_t  myset;
 
-int main() 
+char *hostname;
+int portno;
+int sockfd;
+int serverlen;
+struct sockaddr_in serveraddr;
+struct hostent *server;
+
+int main(int argc, char **argv)
 {
+    if (argc != 3) {
+       fprintf(stderr,"usage: %s <hostname> <port>\n", argv[0]);
+       exit(0);
+    }
+    hostname = argv[1];
+    portno = atoi(argv[2]);
+
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0)
+        error("ERROR opening socket");
+
+    /* gethostbyname: get the server's DNS entry */
+    server = gethostbyname(hostname);
+    if (server == NULL) {
+        fprintf(stderr,"ERROR, no such host as %s\n", hostname);
+        exit(0);
+    }
+
+    /* build the server's Internet address */
+    bzero((char *) &serveraddr, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    bcopy((char *)server->h_addr,
+	  (char *)&serveraddr.sin_addr.s_addr, server->h_length);
+    serveraddr.sin_port = htons(portno);
+    serverlen = sizeof(serveraddr);
+
     init();
     wiringPiISR(RX_PIN, INT_EDGE_BOTH, &read_signal);
     sigsuspend(&myset);
@@ -139,42 +172,30 @@ void record_sensor_data()
         return;
     }
     float c_temp = (new_temp/10.0 - 32) * (5.0/9.0);
-    char *data;
-    data = (char *)malloc(128);
-    snprintf(data, 128, "{\"temperature\": %.2f, \"humidity\": %d}", c_temp, new_hum);
-    post_curl(ch, data);
-  free(data);
+    send_statsd(ch, c_temp, new_hum);
 }
 
-void post_curl(int id, char *post_data) {
-  CURL *curl;
-  CURLcode res;
+void error(char *msg) {
+    perror(msg);
+    exit(0);
+}
 
-  struct curl_slist *headers = NULL;
-  headers = curl_slist_append(headers, "Accept: application/json");
-  headers = curl_slist_append(headers, "Content-Type: application/json");
-  headers = curl_slist_append(headers, "charsets: utf-8");
+void send_statsd(int id, float temperature, int humidity) {
+    int n;
+    char buf[1024];
+    char *data_temp, *data_hum;
 
-  printf("CURL_DATA: %s\n", post_data);
+    data_temp = (char *)malloc(128);
+    snprintf(data_temp, 128, "thermometer.%d.temperature:%.2f|g", id, temperature);
 
-  curl_global_init(CURL_GLOBAL_ALL);
+    data_hum = (char *)malloc(128);
+    snprintf(data_hum, 128, "thermometer.%d.humidity:%d|g", id, humidity);
 
-  curl = curl_easy_init();
-  if(curl) {
-    char *url;
-    url = (char *)malloc(128);
-    snprintf(url, 128, "http://192.168.1.22/thermometers/%d.json", id);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
-
-    res = curl_easy_perform(curl);
-    if(res != CURLE_OK)
-      fprintf(stderr, "curl_easy_perform() failed: %s\n",
-          curl_easy_strerror(res));
-
-    curl_easy_cleanup(curl);
-  }
-  curl_global_cleanup();
+    printf("Received: %s | %s\n", data_temp, data_hum);
+    n = sendto(sockfd, data_temp, strlen(data_temp), 0, (struct sockaddr *)&serveraddr, serverlen);
+    if (n < 0)
+      error("ERROR in sendto");
+    n = sendto(sockfd, data_hum, strlen(data_hum), 0, (struct sockaddr *)&serveraddr, serverlen);
+    if (n < 0)
+      error("ERROR in sendto");
 }
