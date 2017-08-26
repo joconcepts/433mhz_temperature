@@ -12,4 +12,4 @@ void init_globals();
 void read_signal();
 void add_bit(char bit);
 void record_sensor_data();
-void post_curl(char *data);
+void post_curl(int id, char *data);

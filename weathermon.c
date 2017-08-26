@@ -141,12 +141,12 @@ void record_sensor_data()
     float c_temp = (new_temp/10.0 - 32) * (5.0/9.0);
     char *data;
     data = (char *)malloc(128);
-    snprintf(data, 128, "{\"thermometer_id\": %d, \"temperature\": %.2f, \"humidity\": %d}", ch, c_temp, new_hum);
-    post_curl(data);
+    snprintf(data, 128, "{\"temperature\": %.2f, \"humidity\": %d}", c_temp, new_hum);
+    post_curl(ch, data);
   free(data);
 }
 
-void post_curl(char *post_data) {
+void post_curl(int id, char *post_data) {
   CURL *curl;
   CURLcode res;
 
@@ -161,7 +161,11 @@ void post_curl(char *post_data) {
 
   curl = curl_easy_init();
   if(curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.1.12/thermometer_temperatures.json");
+    char *url;
+    url = (char *)malloc(128);
+    snprintf(url, 128, "http://192.168.1.22/thermometers/%d.json", id);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
 
